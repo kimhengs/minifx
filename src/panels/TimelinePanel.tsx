@@ -9,6 +9,7 @@ import { activeComp, getProp, TRANSFORM_PATHS, useProject, type KeySelection } f
 import { useUi } from "../store/uiStore";
 import { ColorField, Empty, LABEL_COLORS, ScrubNumber, Stopwatch, useElementSize } from "../app/ui";
 import { stop } from "../app/playback";
+import { Waveform } from "./Waveform";
 
 const ROW_H = 22;
 const RULER_H = 34;
@@ -416,6 +417,10 @@ export function TimelinePanel() {
                     >
                       <span className="absolute left-0 top-0 bottom-0 w-[6px] cursor-ew-resize bg-white/20" onPointerDown={(e) => begin(e, { kind: "trim", id: r.layer.id, edge: "in" }, "trim")} />
                       <span className="absolute right-0 top-0 bottom-0 w-[6px] cursor-ew-resize bg-white/20" onPointerDown={(e) => begin(e, { kind: "trim", id: r.layer.id, edge: "out" }, "trim")} />
+                      {(() => {
+                        const m = r.layer.sourceId ? useProject.getState().project.media.find((x) => x.id === r.layer.sourceId) : undefined;
+                        return m && (m.kind === "audio" || m.hasAudio) ? <Waveform layer={r.layer} media={m} width={Math.max(2, tx(r.layer.outPoint) - tx(r.layer.inPoint))} height={ROW_H - 6} /> : null;
+                      })()}
                       <span className="absolute left-2 top-0 text-[10px] text-black/70 truncate pointer-events-none" style={{ right: 8, lineHeight: `${ROW_H - 6}px` }}>{r.layer.name}</span>
                     </div>
                   )}
