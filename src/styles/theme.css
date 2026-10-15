@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --base: #161616;
+  --panel: #1e1e1e;
+  --header: #2b2b2b;
+  --line: #333333;
+  --line-soft: #2a2a2a;
+  --ink: #e6e6e6;
+  --muted: #9a9a9a;
+  --accent: #3d8bfd;
+  --key: #f5b13d;
+  --danger: #e5534b;
+  --ok: #46c08a;
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; margin: 0; background: var(--base); color: var(--ink); overflow: hidden; }
+body { font-family: Inter, "Kantumruy Pro", system-ui, sans-serif; font-size: 12px; -webkit-font-smoothing: antialiased; user-select: none; }
+input, textarea, select, button { font: inherit; color: inherit; }
+input, textarea { user-select: text; }
+.mono { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 6px; border: 2px solid var(--panel); }
+::-webkit-scrollbar-track { background: transparent; }
+
+.field { background: #141414; border: 1px solid #3a3a3a; border-radius: 3px; padding: 2px 6px; height: 22px; outline: none; }
+.field:focus { border-color: var(--accent); }
+.btn { height: 24px; padding: 0 10px; border-radius: 3px; background: #333; border: 1px solid #444; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: #3c3c3c; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { filter: brightness(1.1); background: var(--accent); }
+.icon-btn { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 3px; color: var(--muted); cursor: pointer; border: 0; background: transparent; }
+.icon-btn:hover { background: #333; color: var(--ink); }
+.icon-btn[data-on="true"] { color: var(--accent); background: #2a3442; }
+.scrub { color: #4fa3ff; cursor: ew-resize; border-bottom: 1px dotted transparent; }
+.scrub:hover { border-bottom-color: #4fa3ff; }
+.panel-root { height: 100%; width: 100%; background: var(--panel); display: flex; flex-direction: column; overflow: hidden; }
+.panel-bar { height: 28px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 6px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.menu-pop { position: absolute; z-index: 1000; min-width: 220px; background: #262626; border: 1px solid #3c3c3c; border-radius: 4px; padding: 4px 0; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.menu-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 5px 14px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.menu-item:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.menu-item:disabled { opacity: .4; cursor: default; }
+.menu-sep { height: 1px; background: #3a3a3a; margin: 4px 0; }
+
+/* dockview: thin dividers, 28px headers, our palette */
+.dockview-theme-minifx {
+  --dv-group-view-background-color: var(--panel);
+  --dv-tabs-and-actions-container-background-color: var(--header);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--panel);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--header);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--panel);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--header);
+  --dv-tab-divider-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: var(--ink);
+  --dv-activegroup-hiddenpanel-tab-color: var(--muted);
+  --dv-inactivegroup-visiblepanel-tab-color: #c8c8c8;
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--muted);
+  --dv-separator-border: var(--line);
+  --dv-paneview-header-border-color: var(--line);
+  --dv-tabs-and-actions-container-height: 28px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-drag-over-background-color: rgba(61, 139, 253, 0.25);
+  --dv-drag-over-border-color: var(--accent);
+  --dv-floating-box-shadow: 0 10px 30px rgba(0,0,0,.6);
+  --dv-active-sash-color: var(--accent);
+  --dv-sash-color: transparent;
+}
+.dockview-theme-minifx .dv-groupview.dv-active-group > .dv-tabs-and-actions-container .dv-tab.dv-active-tab { box-shadow: inset 0 2px 0 var(--accent); }
