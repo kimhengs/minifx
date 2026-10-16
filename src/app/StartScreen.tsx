@@ -1,6 +1,6 @@
-import { FilePlus2, FolderOpen, Clock, Smartphone, Monitor, Square as SquareIcon } from "lucide-react";
+import { FilePlus2, FolderOpen, Clock, Film, Smartphone, Monitor, Square as SquareIcon } from "lucide-react";
 import { baseName, isDesktop } from "../lib/backend";
-import { newProject, openProject } from "../lib/projectIO";
+import { importDialog, newProject, openProject } from "../lib/projectIO";
 import { useSettings } from "../store/settingsStore";
 
 const PRESETS = [
@@ -18,10 +18,14 @@ export function StartScreen() {
         <div className="flex-1 flex flex-col gap-4">
           <div>
             <div className="text-[28px] font-semibold">MiniFX</div>
-            <div className="text-muted">Motion graphics & video effects · v0.1</div>
+            <div className="text-muted">Video editing, motion graphics & effects · v0.2</div>
           </div>
-          <button type="button" className="btn btn-primary h-[36px] flex items-center gap-2 justify-center text-[13px]" onClick={() => newProject()}>
-            <FilePlus2 size={16} /> New Project
+          <button type="button" className="btn btn-primary h-[52px] flex items-center gap-2 justify-center text-[14px]" onClick={() => void importDialog()}>
+            <Film size={18} /> Import Video & Start Editing
+          </button>
+          <div className="text-[11px] text-muted -mt-2 text-center">or drag video / audio / image files onto this window</div>
+          <button type="button" className="btn h-[36px] flex items-center gap-2 justify-center text-[13px]" onClick={() => newProject()}>
+            <FilePlus2 size={16} /> New Empty Project
           </button>
           <button type="button" className="btn h-[36px] flex items-center gap-2 justify-center text-[13px]" onClick={() => void openProject()}>
             <FolderOpen size={16} /> Open Project…

@@ -103,6 +103,30 @@ pub async fn make_thumbnail(app: AppHandle, path: String, id: String) -> Result<
     .map_err(|e| e.to_string())?
 }
 
+/// A horizontal strip of evenly spaced frames, shown on video clips in the timeline.
+#[tauri::command]
+pub async fn video_filmstrip(app: AppHandle, path: String, id: String, duration: f64, frames: u32) -> Result<Option<String>, String> {
+    let frames = frames.clamp(4, 60);
+    let out = cache_dir(&app, "filmstrips")?.join(format!("{}_{}.jpg", id.replace(['/', '\\', '.'], "_"), frames));
+    let out_s = out.to_string_lossy().to_string();
+    if out.exists() {
+        return Ok(Some(out_s));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let dur = if duration > 0.05 { duration } else { probe_blocking(&path).map(|m| m.duration).unwrap_or(1.0).max(0.05) };
+        let rate = frames as f64 / dur;
+        let vf = format!("fps={rate:.6},scale=-2:54,tile={frames}x1:padding=0");
+        let args: Vec<String> = vec!["-y".into(), "-v".into(), "error".into(), "-i".into(), path.clone(), "-an".into(), "-vf".into(), vf, "-frames:v".into(), "1".into(), "-q:v".into(), "5".into(), out_s.clone()];
+        if run("ffmpeg", &args).is_ok() && Path::new(&out_s).exists() {
+            Ok(Some(out_s))
+        } else {
+            Ok(None)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Serialize, Clone)]
 struct ProxyProgress {
     id: String,
@@ -110,8 +134,10 @@ struct ProxyProgress {
 }
 
 #[tauri::command]
-pub async fn make_proxy(app: AppHandle, path: String, id: String, height: u32) -> Result<String, String> {
-    let out = cache_dir(&app, "proxies")?.join(format!("{}_{}p.mp4", id.replace(['/', '\\', '.'], "_"), height));
+pub async fn make_proxy(app: AppHandle, path: String, id: String, height: u32, crf: Option<u32>) -> Result<String, String> {
+    // crf 26 = light editing proxy; ~18 = visually lossless "preview copy" for codecs the viewer cannot decode
+    let crf = crf.unwrap_or(26).clamp(12, 35);
+    let out = cache_dir(&app, "proxies")?.join(format!("{}_{}p_q{}.mp4", id.replace(['/', '\\', '.'], "_"), height, crf));
     let out_s = out.to_string_lossy().to_string();
     if out.exists() {
         return Ok(out_s);
@@ -120,7 +146,7 @@ pub async fn make_proxy(app: AppHandle, path: String, id: String, height: u32) -
         let duration = probe_blocking(&path).map(|m| m.duration).unwrap_or(0.0);
         let tmp = format!("{out_s}.part.mp4");
         let mut child = command("ffmpeg")
-            .args(["-y", "-v", "error", "-i", &path, "-vf", &format!("scale=-2:{height}"), "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-g", "15", "-c:a", "aac", "-b:a", "128k", "-progress", "pipe:1", "-nostats", &tmp])
+            .args(["-y", "-v", "error", "-i", &path, "-vf", &format!("scale=-2:{height}"), "-c:v", "libx264", "-preset", "veryfast", "-crf", &crf.to_string(), "-pix_fmt", "yuv420p", "-g", "15", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", &tmp])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

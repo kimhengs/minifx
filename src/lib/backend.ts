@@ -215,10 +215,40 @@ export const backend = {
     return out ? backend.mediaUrl(out) : null;
   },
 
-  async proxy(path: string, id: string, height: number): Promise<string> {
+  /** Strip of `frames` thumbnails (each 96x54) spanning the whole clip. */
+  async filmstrip(path: string, id: string, duration: number, frames: number): Promise<string | null> {
+    if (!isDesktop()) return browserFilmstrip(path, duration, frames);
     const { invoke } = await tauri();
-    return invoke<string>("make_proxy", { path, id, height });
+    const out = await invoke<string | null>("video_filmstrip", { path, id, duration, frames });
+    return out ? backend.mediaUrl(out) : null;
   },
+
+  async proxy(path: string, id: string, height: number, crf?: number): Promise<string> {
+    const { invoke } = await tauri();
+    return invoke<string>("make_proxy", { path, id, height, crf: crf ?? null });
+  },
+
+  /** Can the built-in viewer (WebView2 / WebKit) decode this file? "unknown" = still loading after the wait. */
+  canDecode(url: string, kind: "video" | "audio"): Promise<"yes" | "no" | "unknown"> {
+    return new Promise((resolve) => {
+      const el = document.createElement(kind);
+      el.muted = true;
+      el.preload = "auto";
+      let done = false;
+      const finish = (r: "yes" | "no" | "unknown"): void => {
+        if (done) return;
+        done = true;
+        el.removeAttribute("src");
+        el.load();
+        resolve(r);
+      };
+      el.onloadeddata = () => finish(kind === "audio" || (el as HTMLVideoElement).videoWidth > 0 ? "yes" : "no");
+      el.onerror = () => finish(el.error?.code === 4 || el.error?.code === 3 ? "no" : "unknown");
+      window.setTimeout(() => finish("unknown"), 15000);
+      el.src = url;
+    });
+  },
+
 
   async waveform(path: string, buckets: number): Promise<number[]> {
     if (!isDesktop()) return [];
@@ -351,3 +381,38 @@ export const backend = {
     return url;
   },
 };
+
+/** Browser-mode filmstrip: seek a hidden video and paint frames into one canvas. */
+async function browserFilmstrip(url: string, duration: number, frames: number): Promise<string | null> {
+  try {
+    const v = document.createElement("video");
+    v.muted = true;
+    v.preload = "auto";
+    v.src = url;
+    await new Promise<void>((res, rej) => {
+      v.onloadeddata = () => res();
+      v.onerror = () => rej(new Error("video load failed"));
+      window.setTimeout(() => rej(new Error("timeout")), 8000);
+    });
+    const h = 54;
+    const w = Math.max(1, Math.round((v.videoWidth / Math.max(1, v.videoHeight)) * h));
+    const c = document.createElement("canvas");
+    c.width = w * frames;
+    c.height = h;
+    const g = c.getContext("2d");
+    if (!g) return null;
+    const dur = duration > 0 ? duration : v.duration;
+    for (let i = 0; i < frames; i++) {
+      const t = Math.min(dur - 0.05, ((i + 0.5) / frames) * dur);
+      await new Promise<void>((res) => {
+        v.onseeked = () => res();
+        v.currentTime = Math.max(0, t);
+        window.setTimeout(res, 1500);
+      });
+      g.drawImage(v, i * w, 0, w, h);
+    }
+    return c.toDataURL("image/jpeg", 0.7);
+  } catch {
+    return null;
+  }
+}

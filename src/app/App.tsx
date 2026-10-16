@@ -45,7 +45,6 @@ export function App() {
         void confirmDiscard().then((ok) => ok && void openProject(proj));
         return;
       }
-      if (useUi.getState().startScreen) useUi.getState().set({ startScreen: false });
       void importFiles(paths.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p })));
     });
     void backend.onCloseRequested(async () => {

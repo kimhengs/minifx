@@ -1,4 +1,5 @@
-import { addMedia, updateMedia } from "../commands";
+import { addLayer, addMedia, updateMedia } from "../commands";
+import { activeComp } from "../store/projectStore";
 import { createProject, type CompSettings } from "../engine/factory";
 import { uid } from "../engine/interpolation";
 import { migrateProject, serializeProject } from "../engine/migrations";
@@ -79,7 +80,7 @@ export async function confirmDiscard(): Promise<boolean> {
 }
 
 // ---------------- import ----------------
-export async function importFiles(files: PickedFile[]): Promise<void> {
+export async function importFiles(files: PickedFile[], opts: { toTimeline?: boolean; at?: number } = {}): Promise<void> {
   const ui = useUi.getState();
   const items: MediaItem[] = [];
   for (const f of files) {
@@ -108,8 +109,58 @@ export async function importFiles(files: PickedFile[]): Promise<void> {
       ui.toast(`Could not read ${f.name}: ${String(e)}`, "error");
     }
   }
+  if (!items.length) return;
+  // Starting from the start screen: make a composition that matches the first clip.
+  if (ui.startScreen || !activeComp(useProject.getState().project)) {
+    const v = items.find((m) => m.kind === "video" || m.kind === "image");
+    const total = items.reduce((t, m) => t + clipLength(m), 0);
+    newProject({
+      name: v ? v.name.replace(/\.[^.]+$/, "") : "Comp 1",
+      width: v && v.width > 0 ? even(v.width) : 1920,
+      height: v && v.height > 0 ? even(v.height) : 1080,
+      fps: v && v.kind === "video" && v.fps > 0 ? Math.round(v.fps * 1000) / 1000 : 30,
+      duration: Math.max(1, Math.ceil(total * 100) / 100),
+    });
+  }
   addMedia(items);
+  if (opts.toTimeline !== false) placeOnTimeline(items, opts.at);
   for (const m of items) void processMedia(m);
+}
+
+const IMAGE_SECONDS = 5;
+const even = (n: number): number => Math.max(2, Math.round(n / 2) * 2);
+function clipLength(m: MediaItem): number {
+  return m.kind === "image" || !(m.duration > 0) ? IMAGE_SECONDS : m.duration;
+}
+
+/** Like a video editor: clips go onto the timeline back-to-back from the playhead. */
+function placeOnTimeline(items: MediaItem[], at?: number): void {
+  const comp = activeComp(useProject.getState().project);
+  if (!comp) return;
+  let t = at ?? useProject.getState().currentTime;
+  let end = 0;
+  const ids: string[] = [];
+  // audio-only files start at the same spot (music bed) instead of being chained
+  const audioStart = t;
+  for (const m of items) {
+    const kind = m.kind === "audio" ? "audio" : m.kind === "image" ? "image" : "video";
+    const start = kind === "audio" ? audioStart : t;
+    const len = clipLength(m);
+    const id = addLayer(kind, { media: m, start, duration: len });
+    if (id) ids.push(id);
+    if (kind !== "audio") t += len;
+    end = Math.max(end, start + len);
+  }
+  if (end > comp.duration + 1e-3) {
+    const grow = comp.workArea[1] >= comp.duration - 1e-3;
+    useProject.getState().execute("Extend Composition", (p) => {
+      const cc = p.compositions.find((x) => x.id === comp.id);
+      if (!cc) return;
+      cc.duration = Math.ceil(end * 100) / 100;
+      if (grow) cc.workArea = [cc.workArea[0], cc.duration];
+    });
+  }
+  if (ids.length) useProject.getState().selectLayers(ids);
 }
 
 export async function importDialog(): Promise<void> {
@@ -118,7 +169,49 @@ export async function importDialog(): Promise<void> {
 }
 
 /** Thumbnails + proxies run in Rust/ffmpeg in the background; UI stays responsive. */
+export const FILMSTRIP_FRAMES = 24;
+
+/** Footage conversions in flight; export waits for them so it never renders black frames. */
+const conversions = new Set<Promise<void>>();
+export async function waitForConversions(): Promise<void> {
+  while (conversions.size) {
+    const all = [...conversions];
+    await Promise.all(all);
+    for (const p of all) conversions.delete(p);
+  }
+}
+
 async function processMedia(m: MediaItem): Promise<void> {
+  if (m.kind === "video") {
+    // filmstrip first: it is what the timeline shows
+    void backend
+      .filmstrip(m.path, m.id, m.duration, FILMSTRIP_FRAMES)
+      .then((strip) => strip && updateMedia(m.id, { filmstrip: strip, filmstripFrames: FILMSTRIP_FRAMES }))
+      .catch((e) => void backend.log(`filmstrip failed for ${m.path}: ${String(e)}`));
+  }
+  if (m.kind === "video") {
+    const decodable = await backend.canDecode(backend.mediaUrl(m.path), "video");
+    void backend.log(`decode check ${m.name} (${m.codec}): ${decodable}`);
+    if (decodable === "no") {
+      if (!isDesktop()) {
+        useUi.getState().toast(`${m.name}: this browser cannot decode ${m.codec || "this codec"}. Use the desktop app, or convert to H.264/VP9.`, "error");
+      } else {
+        useUi.getState().toast(`Converting ${m.name} (${m.codec}) so it can play in the viewer…`);
+        let release = (): void => undefined;
+        conversions.add(new Promise<void>((r) => (release = r)));
+        try {
+          const h = Math.min(m.height > 0 ? m.height : 1080, 2160);
+          const playable = await backend.proxy(m.path, m.id, h - (h % 2), 18);
+          updateMedia(m.id, { playablePath: playable });
+          useUi.getState().toast(`${m.name} is ready to play`, "success");
+        } catch (e) {
+          useUi.getState().toast(`Could not convert ${m.name}: ${String(e)}`, "error");
+        } finally {
+          release();
+        }
+      }
+    }
+  }
   if (!isDesktop() || m.kind === "audio") return;
   try {
     const thumb = await backend.thumbnail(m.path, m.id);

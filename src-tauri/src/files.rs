@@ -119,6 +119,12 @@ pub fn get_log_dir(app: AppHandle) -> Result<String, String> {
     Ok(log_dir(&app)?.join("minifx.log").to_string_lossy().to_string())
 }
 
+/// Optional video to include in the headless self-test (developers/CI only).
+#[tauri::command]
+pub fn selftest_video() -> Option<String> {
+    std::env::var("MINIFX_SELFTEST_VIDEO").ok().filter(|s| !s.is_empty())
+}
+
 /// Path for the headless self-test export (only set by developers/CI).
 #[tauri::command]
 pub fn selftest_output() -> Option<String> {

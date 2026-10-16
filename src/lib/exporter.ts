@@ -1,3 +1,4 @@
+import { waitForConversions } from "./projectIO";
 import { CompRenderer } from "../engine/renderer";
 import type { Composition, Project } from "../engine/types";
 import { useProject } from "../store/projectStore";
@@ -91,6 +92,8 @@ export async function runQueue(): Promise<void> {
 
 async function renderJob(job: RenderJob): Promise<void> {
   const ui = useUi.getState();
+  ui.updateJob(job.id, { message: "Preparing footage…" });
+  await waitForConversions();
   const project = useProject.getState().project;
   const comp = project.compositions.find((c) => c.id === job.compId);
   if (!comp) {

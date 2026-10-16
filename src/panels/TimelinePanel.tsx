@@ -1,10 +1,11 @@
+import { useShallow } from "zustand/react/shallow";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, Unlock, Circle, CircleDot, LineChart, Magnet, Diamond, ChevronLeft, ChevronRight as Next, Volume2, VolumeX } from "lucide-react";
 import * as cmd from "../commands";
 import { effectDef, type ParamDef } from "../engine/effects";
 import { formatTimecode, snapToFrame } from "../engine/factory";
 import { scalarOf, speedAt, valueAt, isVec2 } from "../engine/interpolation";
-import type { AnimProp, Composition, Keyframe, Layer, ParamValue, Vec2 } from "../engine/types";
+import type { AnimProp, Composition, Keyframe, Layer, MediaItem, ParamValue, Vec2 } from "../engine/types";
 import { activeComp, getProp, TRANSFORM_PATHS, useProject, type KeySelection } from "../store/projectStore";
 import { useUi } from "../store/uiStore";
 import { ColorField, Empty, LABEL_COLORS, ScrubNumber, Stopwatch, useElementSize } from "../app/ui";
@@ -82,10 +83,9 @@ type Drag =
 
 export function TimelinePanel() {
   const comp = useProject((s) => activeComp(s.project));
-  const currentTime = useProject((s) => s.currentTime);
   const selectedLayerIds = useProject((s) => s.selectedLayerIds);
   const selectedKeys = useProject((s) => s.selectedKeys);
-  const ui = useUi();
+  const ui = useUi(useShallow((s) => ({ cachedFrames: s.cachedFrames, expanded: s.expanded, graphEditor: s.graphEditor, graphMode: s.graphMode, revealPaths: s.revealPaths, set: s.set, snapping: s.snapping, timelineZoom: s.timelineZoom })));
   const [trackRef, trackSize] = useElementSize<HTMLDivElement>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -102,6 +102,8 @@ export function TimelinePanel() {
   };
 
   const rows = useMemo(() => (comp ? buildRows(comp, ui.expanded, ui.revealPaths) : []), [comp, ui.expanded, ui.revealPaths]);
+  const media = useProject((s) => s.project.media);
+  const mediaById = useMemo(() => new Map(media.map((m) => [m.id, m])), [media]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -123,7 +125,7 @@ export function TimelinePanel() {
 
   // snapping targets: CTI, layer edges, keyframes, markers, work area
   const snapTargets = (): number[] => {
-    const out = [currentTime, 0, comp.duration, comp.workArea[0], comp.workArea[1]];
+    const out = [useProject.getState().currentTime, 0, comp.duration, comp.workArea[0], comp.workArea[1]];
     for (const l of comp.layers) {
       out.push(l.inPoint, l.outPoint);
       for (const p of [...TRANSFORM_PATHS, "shape.size"]) for (const k of getProp(l, p)?.keyframes ?? []) out.push(k.time + l.start);
@@ -299,14 +301,12 @@ export function TimelinePanel() {
 
   const layerColor = (l: Layer): string => LABEL_COLORS[l.label] ?? "#777";
   const cached = ui.cachedFrames;
-  const ctiX = tx(currentTime);
 
   return (
     <div className="panel-root" onPointerMove={onMove} onPointerUp={onUp} onContextMenu={(e) => e.preventDefault()}>
       {/* toolbar */}
       <div className="panel-bar">
-        <ScrubNumber label="Current time" value={currentTime * comp.fps} step={1} min={0} max={comp.duration * comp.fps - 1} precision={0} width={90} onChange={(f) => useProject.getState().setTime(f / comp.fps)} />
-        <span className="mono text-[13px] text-[#4fa3ff] -ml-1">{formatTimecode(currentTime, comp.fps)}</span>
+        <TimeReadout comp={comp} />
         <span className="text-muted ml-2">{comp.name}</span>
         <span className="flex-1" />
         <button type="button" className="icon-btn" data-on={ui.snapping} title="Snapping (hold Shift while dragging to invert)" aria-label="Snapping" onClick={() => ui.set({ snapping: !ui.snapping })}>
@@ -354,7 +354,7 @@ export function TimelinePanel() {
             begin(e, { kind: "cti" });
             useProject.getState().setTime(snap(xt(trackX(e)), e.shiftKey));
           }} />
-          <div className="absolute pointer-events-none" style={{ left: ctiX - 6, top: 0, width: 12, height: 12, background: "#4fa3ff", clipPath: "polygon(0 0,100% 0,100% 60%,50% 100%,0 60%)" }} />
+          <PlayheadHead vStart={vStart} pps={pps} />
         </div>
       </div>
 
@@ -389,7 +389,7 @@ export function TimelinePanel() {
                   ) : r.type === "group" ? (
                     <span className="text-[#bdbdbd] truncate" style={{ paddingLeft: 30 + r.depth * 14 }}>{r.label}</span>
                   ) : (
-                    <PropHeader row={r} time={currentTime} onFocus={() => setGraphProp({ layerId: r.layer.id, path: r.path })} focused={graphProp?.layerId === r.layer.id && graphProp.path === r.path} />
+                    <PropHeader row={r} onFocus={() => setGraphProp({ layerId: r.layer.id, path: r.path })} focused={graphProp?.layerId === r.layer.id && graphProp.path === r.path} />
                   )}
                 </div>
                 <div className="flex-1 min-w-0 relative overflow-hidden" onPointerDown={onTrackBgDown}
@@ -418,10 +418,17 @@ export function TimelinePanel() {
                       <span className="absolute left-0 top-0 bottom-0 w-[6px] cursor-ew-resize bg-white/20" onPointerDown={(e) => begin(e, { kind: "trim", id: r.layer.id, edge: "in" }, "trim")} />
                       <span className="absolute right-0 top-0 bottom-0 w-[6px] cursor-ew-resize bg-white/20" onPointerDown={(e) => begin(e, { kind: "trim", id: r.layer.id, edge: "out" }, "trim")} />
                       {(() => {
-                        const m = r.layer.sourceId ? useProject.getState().project.media.find((x) => x.id === r.layer.sourceId) : undefined;
-                        return m && (m.kind === "audio" || m.hasAudio) ? <Waveform layer={r.layer} media={m} width={Math.max(2, tx(r.layer.outPoint) - tx(r.layer.inPoint))} height={ROW_H - 6} /> : null;
+                        const m = r.layer.sourceId ? mediaById.get(r.layer.sourceId) : undefined;
+                        if (!m) return null;
+                        const w = Math.max(2, tx(r.layer.outPoint) - tx(r.layer.inPoint));
+                        return (
+                          <>
+                            {m.kind === "video" && m.filmstrip && <Filmstrip media={m} layer={r.layer} pps={pps} height={ROW_H - 6} />}
+                            {(m.kind === "audio" || m.hasAudio) && <Waveform layer={r.layer} media={m} width={w} height={ROW_H - 6} />}
+                          </>
+                        );
                       })()}
-                      <span className="absolute left-2 top-0 text-[10px] text-black/70 truncate pointer-events-none" style={{ right: 8, lineHeight: `${ROW_H - 6}px` }}>{r.layer.name}</span>
+                      <span className="absolute left-2 top-0 text-[10px] truncate pointer-events-none" style={{ right: 8, lineHeight: `${ROW_H - 6}px`, color: "rgba(255,255,255,.92)", textShadow: "0 1px 2px #000" }}>{r.layer.name}</span>
                     </div>
                   )}
                   {!ui.graphEditor && r.type === "layer" && !ui.expanded[r.layer.id] && <CollapsedKeys layer={r.layer} tx={tx} />}
@@ -460,8 +467,8 @@ export function TimelinePanel() {
             <GraphEditor comp={comp} prop={graphProp} tx={tx} xt={xt} width={trackW} height={viewH} mode={ui.graphMode} selectedKeys={selectedKeys} onHandleDown={(e, sel, side, t0, t1) => begin(e, { kind: "handle", sel, side, t0, t1 }, "influence")} onKeyDown={onKeyDown} />
           </div>
         )}
-        {/* CTI line */}
-        <div className="absolute pointer-events-none bg-[#4fa3ff]" style={{ left: LEFT_W + ctiX, width: 1, top: scrollTop, height: viewH }} />
+        {/* CTI line (own component: only it re-renders while playing) */}
+        <PlayheadLine vStart={vStart} pps={pps} top={scrollTop} height={viewH} visibleDur={visibleDur} onFollow={setViewStart} />
       </div>
 
       {menu && (
@@ -498,6 +505,59 @@ function rowTopForLayerIndex(rows: Row[], target: number): number {
     }
   }
   return rows.length * ROW_H;
+}
+
+/** Timecode + frame scrubber; subscribes to the playhead on its own. */
+function TimeReadout({ comp }: { comp: Composition }) {
+  const t = useProject((s) => s.currentTime);
+  return (
+    <>
+      <ScrubNumber label="Current time" value={t * comp.fps} step={1} min={0} max={comp.duration * comp.fps - 1} precision={0} width={90} onChange={(f) => useProject.getState().setTime(f / comp.fps)} />
+      <span className="mono text-[13px] text-[#4fa3ff] -ml-1">{formatTimecode(t, comp.fps)}</span>
+    </>
+  );
+}
+
+function PlayheadHead({ vStart, pps }: { vStart: number; pps: number }) {
+  const t = useProject((s) => s.currentTime);
+  const x = (t - vStart) * pps;
+  return <div className="absolute pointer-events-none" style={{ transform: `translateX(${x - 6}px)`, left: 0, top: 0, width: 12, height: 12, background: "#4fa3ff", clipPath: "polygon(0 0,100% 0,100% 60%,50% 100%,0 60%)", willChange: "transform" }} />;
+}
+
+/** Playhead line. While playing it pages the view so the playhead stays visible. */
+function PlayheadLine({ vStart, pps, top, height, visibleDur, onFollow }: { vStart: number; pps: number; top: number; height: number; visibleDur: number; onFollow: (start: number) => void }) {
+  const t = useProject((s) => s.currentTime);
+  const playing = useUi((s) => s.playing);
+  useEffect(() => {
+    if (!playing) return;
+    if (t > vStart + visibleDur * 0.98 || t < vStart) onFollow(Math.max(0, t - visibleDur * 0.05));
+  }, [t, playing, vStart, visibleDur, onFollow]);
+  const x = (t - vStart) * pps;
+  return <div className="absolute pointer-events-none bg-[#4fa3ff]" style={{ left: LEFT_W, transform: `translateX(${x}px)`, width: 1, top, height, willChange: "transform", boxShadow: "0 0 4px rgba(79,163,255,.6)" }} />;
+}
+
+/** Video frames along the clip, positioned by source time so trimming shows the right frames. */
+function Filmstrip({ media, layer, pps, height }: { media: MediaItem; layer: Layer; pps: number; height: number }) {
+  const frames = media.filmstripFrames ?? 24;
+  const fullW = Math.max(1, media.duration * pps); // whole source clip in px
+  const offset = (layer.inPoint - layer.start) * pps; // trimmed head
+  const tileW = fullW / frames;
+  const aspect = media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9;
+  // when tiles get much wider than a frame, repeat each frame instead of stretching it
+  const natural = height * aspect;
+  const repeat = tileW > natural * 1.5;
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none rounded-[2px]"
+      style={{
+        backgroundImage: `url("${media.filmstrip}")`,
+        backgroundRepeat: repeat ? "repeat-x" : "no-repeat",
+        backgroundSize: repeat ? `${natural * frames}px ${height}px` : `${fullW}px ${height}px`,
+        backgroundPosition: `${-offset}px 0`,
+        opacity: 0.9,
+      }}
+    />
+  );
 }
 
 function Ruler({ comp, pps, vStart, width }: { comp: Composition; pps: number; vStart: number; width: number }) {
@@ -641,7 +701,8 @@ function useUiToggle(id: string): void {
   if (u.revealPaths[id]) u.set({ revealPaths: { ...u.revealPaths, [id]: undefined } });
 }
 
-function PropHeader({ row, time, onFocus, focused }: { row: Extract<Row, { type: "prop" }>; time: number; onFocus: () => void; focused: boolean }) {
+function PropHeader({ row, onFocus, focused }: { row: Extract<Row, { type: "prop" }>; onFocus: () => void; focused: boolean }) {
+  const time = useProject((s) => s.currentTime);
   const { layer, path, label } = row;
   const prop = getProp(layer, path);
   if (!prop) return null;

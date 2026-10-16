@@ -29,6 +29,8 @@ interface LayerNode {
   maskKey: string;
   filters: Map<string, Filter>;
   noise?: Sprite;
+  /** content size in layer space for footage layers (independent of proxy/texture load state) */
+  logicalSize: [number, number] | null;
 }
 
 export interface RenderOptions {
@@ -196,15 +198,18 @@ export class CompRenderer {
   layerBounds(layerId: string): Bounds | null {
     const n = this.nodes.get(layerId);
     if (!n?.content) return null;
+    if (n.logicalSize) return { x: n.content.position.x, y: n.content.position.y, w: n.logicalSize[0], h: n.logicalSize[1] };
     const b = n.content.getLocalBounds();
     const p = n.content.position;
-    return { x: b.x + p.x, y: b.y + p.y, w: b.width, h: b.height };
+    const sx = Number.isFinite(n.content.scale.x) ? n.content.scale.x : 1;
+    const sy = Number.isFinite(n.content.scale.y) ? n.content.scale.y : 1;
+    return { x: b.x * sx + p.x, y: b.y * sy + p.y, w: b.width * sx, h: b.height * sy };
   }
 
   private ensureNode(id: string): LayerNode {
     let n = this.nodes.get(id);
     if (!n) {
-      n = { container: new Container(), content: null, contentKey: "", maskObj: null, maskKey: "", filters: new Map() };
+      n = { container: new Container(), content: null, contentKey: "", maskObj: null, maskKey: "", filters: new Map(), logicalSize: null };
       this.nodes.set(id, n);
     }
     return n;
@@ -256,10 +261,18 @@ export class CompRenderer {
           node.container.addChildAt(sp, 0);
         }
         const sp = node.content as Sprite;
-        sp.texture = v.texture;
-        // proxies are smaller than the original: scale them up so layout stays identical
-        sp.width = src.width;
-        sp.height = src.height;
+        if (sp.texture !== v.texture) sp.texture = v.texture;
+        // proxies are smaller than the original: scale them up so layout stays identical.
+        // (Never divide by a not-yet-loaded 0x0 texture: that leaves the sprite NaN-sized forever.)
+        node.logicalSize = [src.width, src.height];
+        const tw = v.texture.width;
+        const th = v.texture.height;
+        if (tw > 1 && th > 1 && src.width > 0 && src.height > 0) {
+          sp.visible = true;
+          sp.scale.set(src.width / tw, src.height / th);
+        } else {
+          sp.visible = false;
+        }
         const anySolo = comp.layers.some((l) => l.solo);
         if (!opts.exporting) this.media.sync(v.el, lt, opts.playing, comp.fps, layer.audioEnabled && src.hasAudio && (!anySolo || layer.solo));
         break;
@@ -274,8 +287,13 @@ export class CompRenderer {
         }
         const sp = node.content as Sprite;
         if (tex && sp.texture !== tex) sp.texture = tex;
-        sp.width = src.width;
-        sp.height = src.height;
+        node.logicalSize = [src.width, src.height];
+        if (tex && tex.width > 0 && tex.height > 0 && src.width > 0 && src.height > 0) {
+          sp.visible = true;
+          sp.scale.set(src.width / tex.width, src.height / tex.height);
+        } else {
+          sp.visible = false;
+        }
         break;
       }
       case "solid":

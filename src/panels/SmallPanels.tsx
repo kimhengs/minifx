@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useEffect, useMemo, useState } from "react";
 import { Play, Pause, SkipBack, SkipForward, StepBack, StepForward, Repeat, Zap, FolderOpen, X, RotateCcw, History as HistoryIcon, Sparkles } from "lucide-react";
 import * as cmd from "../commands";
@@ -146,7 +147,7 @@ export function InfoPanel() {
 
 // ---------------- Preview ----------------
 export function PreviewPanel() {
-  const ui = useUi();
+  const ui = useUi(useShallow((s) => ({ cachedFrames: s.cachedFrames, loop: s.loop, playing: s.playing, set: s.set })));
   const comp = useProject((s) => activeComp(s.project));
   if (!comp) return <Empty>No composition.</Empty>;
   const total = Math.round((comp.workArea[1] - comp.workArea[0]) * comp.fps);

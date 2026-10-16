@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useEffect, useRef, useState } from "react";
 import { Graphics } from "pixi.js";
 import { Circle, Hand, Hexagon, MousePointer2, PenTool, Square, Type, Crosshair, ScanLine, Grid3x3, Frame } from "lucide-react";
@@ -45,8 +46,7 @@ export function CompositionPanel() {
   const [ready, setReady] = useState(false);
   const [textEdit, setTextEdit] = useState<{ id: string; x: number; y: number; value: string } | null>(null);
   const comp = useProject((s) => activeComp(s.project));
-  const currentTime = useProject((s) => s.currentTime);
-  const ui = useUi();
+  const ui = useUi(useShallow((s) => ({ fitView: s.fitView, penPoints: s.penPoints, res: s.res, safeGuides: s.safeGuides, set: s.set, tool: s.tool, transparencyGrid: s.transparencyGrid, zoom: s.zoom })));
 
   // ---------- renderer lifecycle ----------
   useEffect(() => {
@@ -133,9 +133,6 @@ export function CompositionPanel() {
           perf.renderMs = perf.renderMs * 0.9 + ms * 0.1;
           lastSig = sig;
           dirtyMedia = false;
-          if (u.playing && !frameCache.has(frameIndex) && frameCache.canStore(r.canvas.width, r.canvas.height)) {
-            void createImageBitmap(r.canvas).then((bmp) => frameCache.put(frameIndex, bmp));
-          }
         }
       }
       frames++;
@@ -456,7 +453,7 @@ export function CompositionPanel() {
           </button>
         ))}
         <span className="flex-1" />
-        <span className="mono text-[11px] text-[#cfcfcf]">{formatTimecode(currentTime, comp.fps)}</span>
+        <ViewerTimecode fps={comp.fps} />
         <Select
           label="Magnification"
           width={68}
@@ -587,4 +584,9 @@ function drawOverlay(r: CompRenderer, c: Composition, selected: string[], t: num
     if (drag.tool === "ellipse" || drag.tool === "maskEllipse") g.ellipse(x + w / 2, y + h / 2, w / 2, h / 2).stroke({ color, width: 1 });
     else g.rect(x, y, w, h).stroke({ color, width: 1 });
   }
+}
+
+function ViewerTimecode({ fps }: { fps: number }) {
+  const t = useProject((s) => s.currentTime);
+  return <span className="mono text-[11px] text-[#cfcfcf]">{formatTimecode(t, fps)}</span>;
 }

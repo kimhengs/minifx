@@ -145,7 +145,12 @@ export interface MediaItem {
   codec: string;
   size: number;
   thumbnail?: string;
+  /** horizontal strip of evenly spaced frames across the whole clip (timeline display) */
+  filmstrip?: string;
+  filmstripFrames?: number;
   proxyPath?: string;
+  /** high-quality H.264 copy, made when the viewer cannot decode the original codec (HEVC, ProRes, 10-bit…) */
+  playablePath?: string;
   status: "ready" | "processing" | "offline";
 }
 

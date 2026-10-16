@@ -34,7 +34,7 @@ export class MediaPool {
   constructor(private useProxies: boolean) {}
 
   private urlFor(m: MediaItem): string {
-    const path = this.useProxies && m.proxyPath ? m.proxyPath : m.path;
+    const path = (this.useProxies && m.proxyPath) || m.playablePath || m.path;
     return backend.mediaUrl(path);
   }
 
@@ -69,12 +69,32 @@ export class MediaPool {
     el.src = url;
     const source = new VideoSource({ resource: el, autoPlay: false, updateFPS: 0, autoLoad: true });
     const entry: VideoEntry = { kind: "video", el, texture: new Texture({ source }), url, ready: false };
+    // The GPU texture is created before the video knows its size (1x1). Resize it to the
+    // real frame size first, otherwise every frame upload fails and the viewer stays black.
+    const fitSize = (): void => {
+      const w = el.videoWidth;
+      const h = el.videoHeight;
+      if (!(w > 0 && h > 0)) return;
+      if (source.pixelWidth !== w || source.pixelHeight !== h) source.resize(w, h, 1);
+      // A Texture made while the video was 0x0 keeps a 0x0 frame: replace it with a correctly sized one.
+      if (entry.texture.width !== w || entry.texture.height !== h) {
+        entry.texture = new Texture({ source });
+        this.onChange();
+      }
+    };
+    el.addEventListener("loadedmetadata", fitSize);
+    el.addEventListener("error", () => {
+      const err = el.error;
+      void backend.log(`video load error (code ${err?.code ?? "?"}: ${err?.message || "no message"}) for ${m.name} via ${url.slice(0, 120)}`).catch(() => undefined);
+    });
     el.addEventListener("loadeddata", () => {
+      fitSize();
       entry.ready = true;
       source.update();
       this.onChange();
     });
     el.addEventListener("seeked", () => {
+      fitSize();
       source.update();
       this.onChange();
     });
@@ -100,10 +120,24 @@ export class MediaPool {
     const t = Math.min(Math.max(0, srcTime), Math.max(0, dur - 0.01));
     el.muted = !audible;
     if (playing) {
-      if (Math.abs(el.currentTime - t) > 0.25) el.currentTime = t;
-      if (el.paused) void el.play().catch(() => undefined);
+      const drift = el.currentTime - t; // > 0: media is ahead of the timeline
+      if (el.paused) {
+        if (Math.abs(drift) > 0.5 / fps) el.currentTime = t;
+        el.playbackRate = 1;
+        void el.play().catch(() => undefined);
+      } else if (Math.abs(drift) > 0.6) {
+        // far off (loop, jump): hard seek
+        el.currentTime = t;
+        el.playbackRate = 1;
+      } else if (Math.abs(drift) > 0.025) {
+        // small drift: nudge speed instead of seeking, so the picture never stutters
+        el.playbackRate = Math.min(1.15, Math.max(0.85, 1 - drift * 2));
+      } else if (el.playbackRate !== 1) {
+        el.playbackRate = 1;
+      }
     } else {
       if (!el.paused) el.pause();
+      if (el.playbackRate !== 1) el.playbackRate = 1;
       if (Math.abs(el.currentTime - t) > 0.5 / fps) el.currentTime = t;
     }
   }
@@ -111,6 +145,11 @@ export class MediaPool {
   /** Frame-accurate seek for export: resolves after the frame is decoded. */
   seekExact(el: HTMLVideoElement, t: number, texture: Texture): Promise<void> {
     return new Promise((resolve) => {
+      // a file the viewer cannot decode never fires "seeked": don't stall export 3 s per frame
+      if (el.error) {
+        resolve();
+        return;
+      }
       const target = Math.max(0, Math.min(t, (el.duration || t + 1) - 0.001));
       if (el.readyState >= 2 && Math.abs(el.currentTime - target) < 1e-4) {
         texture.source.update();
@@ -123,6 +162,7 @@ export class MediaPool {
         resolve();
       };
       el.addEventListener("seeked", done);
+      el.addEventListener("error", done, { once: true });
       el.currentTime = target;
       window.setTimeout(done, 3000);
     });
