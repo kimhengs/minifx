@@ -12,6 +12,7 @@ import { togglePlay } from "./playback";
 import { StartScreen } from "./StartScreen";
 import { TitleBar } from "./TitleBar";
 import { Workspace } from "./Workspace";
+import { diag } from "./diagnostics";
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
@@ -22,16 +23,20 @@ function isTyping(e: KeyboardEvent): boolean {
 
 export function App() {
   const startScreen = useUi((s) => s.startScreen);
+  useEffect(() => diag(`view: ${startScreen ? "start screen" : "workspace"}`), [startScreen]);
 
   // boot: settings, launch file (double-clicked .msproj), crash recovery, autosave
   useEffect(() => {
     void (async () => {
+      diag("boot: loading settings");
       await useSettings.getState().load();
       const launch = await backend.launchFile();
+      diag(`boot: settings ok, launch file=${launch ?? "none"}`);
       if (launch) await openProject(launch);
       else if (await checkRecovery()) useUi.getState().set({ dialog: "recovery" });
       startAutosave();
       perf.mark("ready");
+      diag("boot: ready");
       void maybeRunSelfTest();
     })();
     void backend.onFileDrop((paths) => {

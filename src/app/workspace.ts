@@ -127,7 +127,7 @@ export async function restoreLayout(): Promise<void> {
   if (layout) {
     try {
       api.fromJSON(layout as Parameters<DockviewApi["fromJSON"]>[0]);
-      return;
+      if (api.panels.length > 0) return;
     } catch {
       /* fall back to the built-in layout */
     }
@@ -164,6 +164,14 @@ export async function switchWorkspace(name: string): Promise<void> {
     api.fromJSON(layout as Parameters<DockviewApi["fromJSON"]>[0]);
   } else buildLayout(name);
   scheduleLayoutSave();
+}
+
+/** Drops the auto-saved layout (used when a restored layout fails to render). */
+export async function forgetSavedLayout(): Promise<void> {
+  const saved = await readSaved();
+  delete saved.layouts.__last__;
+  if (!BUILTIN_WORKSPACES.includes(saved.current as WorkspaceName)) saved.current = "Default";
+  await backend.appDataWrite("workspaces.json", JSON.stringify(saved));
 }
 
 export async function resetWorkspace(): Promise<void> {

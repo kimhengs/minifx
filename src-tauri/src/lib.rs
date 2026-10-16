@@ -44,6 +44,7 @@ pub fn run() {
             files::get_launch_file,
             files::write_log,
             files::get_log_dir,
+            files::open_devtools,
             files::selftest_output,
             files::selftest_exit,
             media::probe_media,

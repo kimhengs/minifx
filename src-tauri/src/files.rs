@@ -131,3 +131,13 @@ pub fn selftest_exit(app: AppHandle) {
         app.exit(0);
     }
 }
+
+/// F12 in the app: opens the WebView developer tools (for diagnosing user reports).
+#[tauri::command]
+pub fn open_devtools(window: tauri::WebviewWindow) {
+    if window.is_devtools_open() {
+        window.close_devtools();
+    } else {
+        window.open_devtools();
+    }
+}

@@ -282,6 +282,12 @@ export const backend = {
     await invoke("write_log", { line });
   },
 
+  async openDevtools(): Promise<void> {
+    if (!isDesktop()) return;
+    const { invoke } = await tauri();
+    await invoke("open_devtools");
+  },
+
   async revealLogs(): Promise<void> {
     if (!isDesktop()) return;
     const { invoke } = await tauri();
