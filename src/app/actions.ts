@@ -1,3 +1,4 @@
+import { useChat } from "../ai/chatStore";
 // Single registry of user actions: used by the menu bar, keyboard shortcuts,
 // the shortcut editor and the AI assistant.
 import * as cmd from "../commands";
@@ -231,6 +232,7 @@ export const ACTIONS: Action[] = [
   ...(Object.keys(PANELS) as PanelId[]).map((id) => ({ id: `panel.${id}`, label: PANELS[id], menu: "Window" as const, run: () => openPanel(id) })),
   { id: "ai.open", label: "AI Assistant", menu: "Window", keys: "Ctrl+/", run: () => openPanel("ai") },
   // Help
+  { id: "window.aiChat", label: "AI Chat", menu: "Window", keys: "F1", run: () => useChat.getState().setOpen(!useChat.getState().open) },
   { id: "help.shortcuts", label: "Keyboard Shortcuts…", menu: "Help", keys: "Ctrl+Alt+'", run: () => U().set({ dialog: "preferences" }) },
   { id: "help.updates", label: "Check for Updates…", menu: "Help", run: () => void checkForUpdates() },
   { id: "help.logs", label: "Open Log Folder", menu: "Help", run: () => void backend.revealLogs() },

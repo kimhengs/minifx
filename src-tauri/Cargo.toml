@@ -1,6 +1,6 @@
 [package]
 name = "minifx"
-version = "0.2.0"
+version = "0.3.0"
 description = "MiniFX - lightweight motion graphics and video effects editor"
 authors = ["MiniFX"]
 edition = "2021"

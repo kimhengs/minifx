@@ -12,6 +12,7 @@ import { togglePlay } from "./playback";
 import { StartScreen } from "./StartScreen";
 import { TitleBar } from "./TitleBar";
 import { Workspace } from "./Workspace";
+import { ChatPopup } from "./ChatPopup";
 import { diag } from "./diagnostics";
 
 function isTyping(e: KeyboardEvent): boolean {
@@ -105,6 +106,7 @@ export function App() {
     <div className="h-full flex flex-col font-ui" onContextMenu={(e) => e.preventDefault()}>
       <TitleBar />
       {startScreen ? <StartScreen /> : <Workspace />}
+      {!startScreen && <ChatPopup />}
       <Dialogs />
       <Toasts />
     </div>

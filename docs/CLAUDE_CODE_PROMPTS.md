@@ -17,6 +17,53 @@
 
 ---
 
+## Master Prompt — "Mini After Effects" ស៊ី CPU/RAM តិច
+
+ដាក់ Prompt នេះមុនគេបង្អស់ នៅក្នុង Session ទី១។ Claude Code នឹងចងចាំគោលការណ៍ទាំងនេះ ដោយសរសេរវាចូលក្នុង `CLAUDE.md`៖
+
+```
+MiniFX's goal: a "mini After Effects" clone — the core AE workflow (compositions, precomps, layers, keyframes with
+graph editor, masks, track mattes, parenting, expressions-lite, effects, text animators, shape layers, 2.5D camera,
+render queue) — that runs smoothly on a cheap laptop (4 GB RAM, integrated GPU, no dedicated graphics card).
+
+Add these performance rules to CLAUDE.md and follow them in every change:
+- Resource budget: idle < 1% CPU and < 250 MB RAM; editing a 1080p comp with 10 layers < 600 MB RAM;
+  app cold start < 2 s; installer < 10 MB (+ FFmpeg). Measure with Task Manager / performance.memory and report numbers.
+- Render on the GPU only (PixiJS/WebGL shaders). Never process pixels on the CPU in JS.
+- Draw only when something changed (dirty flags) — no continuous render loop while idle; pause rendering when the
+  window is minimized or hidden.
+- Video: decode only the visible frame range, cap decoded-frame caches by a RAM budget (setting, default 512 MB),
+  release VideoFrames/textures immediately, use half-resolution preview + auto proxies for 4K/HEVC.
+- UI: virtualize long lists (timeline rows, media bins), narrow store selectors, no per-frame React re-renders of
+  big components, lazy-load panels and heavy libraries (PSD parser, Whisper, plugins) only when first used.
+- Rust side: stream, don't buffer whole files; heavy work (thumbnails, proxies, waveforms) in background threads
+  with low priority, at most N parallel FFmpeg jobs (N = cores/2).
+- Add a perf HUD (Ctrl+Shift+P: fps, frame ms, RAM, GPU memory estimate, cache size) and an automated
+  benchmark (npm run bench) that fails if the budgets regress.
+Start by measuring the current app against these budgets and write the results to docs/PERF.md.
+```
+
+---
+
+## Prompt — AI Chat Pop-up ដូច Messenger (មានរួចហើយក្នុង v0.3, ប្រើ Prompt នេះដើម្បីធ្វើឲ្យល្អជាងនេះ)
+
+```
+The AI chat already exists as a Messenger-style floating bubble (src/app/ChatPopup.tsx, src/ai/AIChat.tsx,
+src/ai/chatStore.ts — shared conversation with the AI panel). Improve it:
+- Draggable bubble that snaps to screen edges, remembers position; chat window resizable; unread badge;
+  sound + subtle animation on new replies (toggle in settings).
+- Rich messages: images/thumbnails of the frames the AI is talking about, clickable timecodes that move the
+  playhead, "Apply / Edit / Undo" buttons, step-by-step progress while a plan runs, streaming text.
+- Attach files by drag-and-drop into the chat (video, image, music, PSD) → the AI imports and uses them.
+- Voice input (Web Speech API / Whisper) in Khmer and English.
+- Conversation history saved per project; "New chat"; copy message; markdown rendering.
+- Connect it to the real Claude agent from Stage 7 (tool use over src/commands); keep the offline Khmer
+  keyword planner as the fallback when there is no API key or no internet.
+Keep it light: nothing mounts until the bubble is opened, and it never re-renders the editor.
+```
+
+---
+
 ## Stage 0 — Windows setup + audit (ធ្វើមុនគេ)
 
 ```
