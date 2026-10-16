@@ -282,6 +282,13 @@ export const backend = {
     await invoke("write_log", { line });
   },
 
+  /** Quits the whole app process immediately (after the caller handled unsaved work). */
+  async exitApp(): Promise<void> {
+    if (!isDesktop()) return;
+    const { invoke } = await tauri();
+    await invoke("exit_app");
+  },
+
   async openDevtools(): Promise<void> {
     if (!isDesktop()) return;
     const { invoke } = await tauri();
@@ -315,9 +322,18 @@ export const backend = {
     }
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const w = getCurrentWindow();
+    // We always take over the close: ask about unsaved work, then quit from Rust.
+    // (Letting the JS API close the window needs the destroy permission and can leave
+    // the process running in the background if anything goes wrong.)
     await w.onCloseRequested(async (event) => {
-      const allow = await handler();
-      if (!allow) event.preventDefault();
+      event.preventDefault();
+      let allow = true;
+      try {
+        allow = await handler();
+      } catch {
+        allow = true;
+      }
+      if (allow) await backend.exitApp();
     });
   },
 

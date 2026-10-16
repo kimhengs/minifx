@@ -49,8 +49,12 @@ export function App() {
       void importFiles(paths.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() ?? p })));
     });
     void backend.onCloseRequested(async () => {
-      const ok = await confirmDiscard();
-      if (ok) await markCleanExit();
+      const ok = await confirmDiscard().catch(() => true);
+      if (ok) {
+        // Never let bookkeeping block quitting.
+        await Promise.race([markCleanExit().catch(() => undefined), new Promise((r) => window.setTimeout(r, 1500))]);
+        diag("quit");
+      }
       return ok;
     });
     if (backend.isDesktopApp()) {

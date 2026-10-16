@@ -19,6 +19,7 @@ pub fn run() {
         // running window and asks it to open the file.
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
                 let _ = w.unminimize();
                 let _ = w.set_focus();
             }
@@ -35,6 +36,18 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(files::LaunchFile(Mutex::new(launch)))
         .manage(export::Exports::default())
+        .on_window_event(|window, event| {
+            // Safety net: the UI normally handles closing (unsaved-changes prompt) and then
+            // quits. If the UI is stuck, a second close request within 8 s always quits.
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                static LAST: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+                let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+                if last.map(|t| t.elapsed().as_secs() < 8).unwrap_or(false) {
+                    window.app_handle().exit(0);
+                }
+                *last = Some(std::time::Instant::now());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             files::app_data_read,
             files::app_data_write,
@@ -45,6 +58,7 @@ pub fn run() {
             files::write_log,
             files::get_log_dir,
             files::open_devtools,
+            files::exit_app,
             files::selftest_output,
             files::selftest_exit,
             media::probe_media,

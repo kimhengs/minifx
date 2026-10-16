@@ -141,3 +141,10 @@ pub fn open_devtools(window: tauri::WebviewWindow) {
         window.open_devtools();
     }
 }
+
+/// Quit the app (called by the UI after it has dealt with unsaved changes).
+#[tauri::command]
+pub fn exit_app(app: AppHandle) {
+    append_log(&app, "minifx.log", "exit requested by UI");
+    app.exit(0);
+}

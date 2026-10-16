@@ -47,6 +47,10 @@ Function .onInit
 FunctionEnd
 
 Section "Install"
+  ; Close any running (or stuck in the background) copy so its files can be replaced.
+  nsExec::Exec 'taskkill /F /IM ${APP}.exe'
+  Pop $0
+  Sleep 800
   SetOutPath "$INSTDIR"
   File "${SRC}\${APP}.exe"
   File /nonfatal "${SRC}\WebView2Loader.dll"
@@ -89,6 +93,9 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  nsExec::Exec 'taskkill /F /IM ${APP}.exe'
+  Pop $0
+  Sleep 800
   Delete "$INSTDIR\${APP}.exe"
   Delete "$INSTDIR\ffmpeg.exe"
   Delete "$INSTDIR\ffprobe.exe"
